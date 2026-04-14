@@ -59,8 +59,8 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "package": "vsce package --out releases/",
-    "publish": "vsce publish"
+    "package": "npx vsce package --out releases/",
+    "publish": "npx vsce publish"
   },
   "devDependencies": {
     "@types/node": "^16.18.126",
