@@ -147,8 +147,12 @@ function findSymbolHierarchy(symbols: vscode.DocumentSymbol[], position: vscode.
             if (symbol.range.contains(position)) {
                 hierarchy.push(symbol);
                 
-                // Search children for more specific symbols
-                if (symbol.children && symbol.children.length > 0) {
+                // Check if this is a method or function
+                const isMethod = symbol.kind === vscode.SymbolKind.Method || symbol.kind === vscode.SymbolKind.Function;
+                
+                // Only search children if this is not a method/function
+                // This ensures we return the current method, not the called method
+                if (!isMethod && symbol.children && symbol.children.length > 0) {
                     searchSymbols(symbol.children);
                 }
                 return true;
