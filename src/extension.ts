@@ -102,6 +102,37 @@ async function generateFullReference(document: vscode.TextDocument, position: vs
             return buildCompleteReference(document, [matchingSymbol]);
         }
         
+        // Try to get definition of the word for method calls
+        try {
+            const definitions = await vscode.commands.executeCommand<vscode.Location[]>(
+                'vscode.executeDefinitionProvider',
+                document.uri,
+                position
+            );
+            
+            if (definitions && definitions.length > 0) {
+                const definitionLocation = definitions[0];
+                const definitionDocument = await vscode.workspace.openTextDocument(definitionLocation.uri);
+                const definitionSymbols = await getDocumentSymbols(definitionDocument);
+                
+                if (definitionSymbols && definitionSymbols.length > 0) {
+                    // Find the symbol at the definition position
+                    const definitionSymbolPath = findSymbolHierarchy(definitionSymbols, definitionLocation.range.start);
+                    if (definitionSymbolPath.length > 0) {
+                        return buildCompleteReference(definitionDocument, definitionSymbolPath);
+                    }
+                    
+                    // Try to find symbol by name in the definition file
+                    const definitionMatchingSymbol = findSymbolByName(definitionSymbols, word);
+                    if (definitionMatchingSymbol) {
+                        return buildCompleteReference(definitionDocument, [definitionMatchingSymbol]);
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Error getting definition:', error);
+        }
+        
         // Final fallback: just the word with namespace
         return buildFallbackReference(document, word);
     }
@@ -147,12 +178,9 @@ function findSymbolHierarchy(symbols: vscode.DocumentSymbol[], position: vscode.
             if (symbol.range.contains(position)) {
                 hierarchy.push(symbol);
                 
-                // Check if this is a method or function
-                const isMethod = symbol.kind === vscode.SymbolKind.Method || symbol.kind === vscode.SymbolKind.Function;
-                
-                // Only search children if this is not a method/function
-                // This ensures we return the current method, not the called method
-                if (!isMethod && symbol.children && symbol.children.length > 0) {
+                // Always search children to get the full hierarchy
+                // This ensures we can find the method being called
+                if (symbol.children && symbol.children.length > 0) {
                     searchSymbols(symbol.children);
                 }
                 return true;
