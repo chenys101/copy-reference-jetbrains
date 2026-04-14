@@ -85,6 +85,41 @@ async function generateFullReference(document: vscode.TextDocument, position: vs
     
     const word = document.getText(wordRange);
     
+    // Check if this is a method call by looking at the line content
+    const line = document.lineAt(position.line);
+    const lineText = line.text;
+    
+    // Try to get definition of the word first for method calls
+    try {
+        const definitions = await vscode.commands.executeCommand<vscode.Location[]>(
+            'vscode.executeDefinitionProvider',
+            document.uri,
+            position
+        );
+        
+        if (definitions && definitions.length > 0) {
+            const definitionLocation = definitions[0];
+            const definitionDocument = await vscode.workspace.openTextDocument(definitionLocation.uri);
+            const definitionSymbols = await getDocumentSymbols(definitionDocument);
+            
+            if (definitionSymbols && definitionSymbols.length > 0) {
+                // Find the symbol at the definition position
+                const definitionSymbolPath = findSymbolHierarchy(definitionSymbols, definitionLocation.range.start);
+                if (definitionSymbolPath.length > 0) {
+                    return buildCompleteReference(definitionDocument, definitionSymbolPath);
+                }
+                
+                // Try to find symbol by name in the definition file
+                const definitionMatchingSymbol = findSymbolByName(definitionSymbols, word);
+                if (definitionMatchingSymbol) {
+                    return buildCompleteReference(definitionDocument, [definitionMatchingSymbol]);
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Error getting definition:', error);
+    }
+    
     // Get document symbols to build the hierarchy
     const symbols = await getDocumentSymbols(document);
     if (!symbols || symbols.length === 0) {
@@ -100,37 +135,6 @@ async function generateFullReference(document: vscode.TextDocument, position: vs
         const matchingSymbol = findSymbolByName(symbols, word);
         if (matchingSymbol) {
             return buildCompleteReference(document, [matchingSymbol]);
-        }
-        
-        // Try to get definition of the word for method calls
-        try {
-            const definitions = await vscode.commands.executeCommand<vscode.Location[]>(
-                'vscode.executeDefinitionProvider',
-                document.uri,
-                position
-            );
-            
-            if (definitions && definitions.length > 0) {
-                const definitionLocation = definitions[0];
-                const definitionDocument = await vscode.workspace.openTextDocument(definitionLocation.uri);
-                const definitionSymbols = await getDocumentSymbols(definitionDocument);
-                
-                if (definitionSymbols && definitionSymbols.length > 0) {
-                    // Find the symbol at the definition position
-                    const definitionSymbolPath = findSymbolHierarchy(definitionSymbols, definitionLocation.range.start);
-                    if (definitionSymbolPath.length > 0) {
-                        return buildCompleteReference(definitionDocument, definitionSymbolPath);
-                    }
-                    
-                    // Try to find symbol by name in the definition file
-                    const definitionMatchingSymbol = findSymbolByName(definitionSymbols, word);
-                    if (definitionMatchingSymbol) {
-                        return buildCompleteReference(definitionDocument, [definitionMatchingSymbol]);
-                    }
-                }
-            }
-        } catch (error) {
-            console.error('Error getting definition:', error);
         }
         
         // Final fallback: just the word with namespace
